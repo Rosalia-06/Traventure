@@ -1,0 +1,49 @@
+import os
+from typing import List, Literal, Optional
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from google import genai
+from google.genai import types
+
+load_dotenv()
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "https://traventure-4m5a.onrender.com"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+MODEL = "gemini-3.6-flash"
+
+class Message(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[Message] = []
+    system: Optional[str] = None
+
+@app.get("/")
+def health():
+    return {"status": "ok"}
+
+@app.post("/chat")
+def chat(req: ChatRequest):
+    try:
+        contents = [
+            types.Content(role="user" if m.role == "user" else "model", parts=[types.Part(text=m.content)])
+            for m in req.history
+        ]
+        contents.append(types.Content(role="user", parts=[types.Part(text=req.message)]))
+        config = types.GenerateContentConfig(system_instruction=req.system) if req.system else None
+        response = client.models.generate_content(model=MODEL, contents=contents, config=config)
+        return {"reply": response.text}
+    except Exception as e:
+        return {"reply": "Sorry, I couldn't process that right now. Try again in a moment.", "error": str(e)}

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 /* ════════════════════════════════════════════════════════════════════════
    TRAVENTURE — design tokens
@@ -918,7 +919,7 @@ function ChatPage({ prefs, initialMessage }) {
     return base;
   };
 
-  async function sendMessage(text) {
+    async function sendMessage(text) {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
     const userMsg = { role: "user", content: trimmed, time: now() };
@@ -927,14 +928,14 @@ function ChatPage({ prefs, initialMessage }) {
     setInput("");
     setLoading(true);
     try {
-      const apiMsgs = history.map(m => ({ role: m.role === "user" ? "user" : "assistant", content: m.rawContent || m.content }));
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const apiHistory = messages.map(m => ({ role: m.role === "user" ? "user" : "assistant", content: m.rawContent || m.content }));
+      const res = await fetch(`${API_BASE_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: buildSystemPrompt(), messages: apiMsgs }),
+        body: JSON.stringify({ message: trimmed, history: apiHistory, system: buildSystemPrompt() }),
       });
       const data = await res.json();
-      const raw = data.content?.find(b => b.type === "text")?.text || "Sorry, couldn't process that.";
+      const raw = data.reply || "Sorry, couldn't process that.";
       const { text: parsed, places, weather } = parseAI(raw);
       setMessages(prev => [...prev, { role: "assistant", content: parsed, rawContent: raw, places, weather, time: now() }]);
     } catch {

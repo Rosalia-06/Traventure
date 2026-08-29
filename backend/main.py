@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-2.5-flash-lite"
+MODEL = "gemini-3.5-flash-lite"
 
 class Message(BaseModel):
     role: Literal["user", "assistant"]
@@ -37,17 +37,25 @@ class ChatRequest(BaseModel):
 def health():
     return {"status": "ok"}
 
+FALLBACK_MODELS = ["gemini-3.5-flash-lite", "gemini-2.0-flash"]
+
 @app.post("/chat")
 def chat(req: ChatRequest):
-    try:
-        contents = [
-            types.Content(role="user" if m.role == "user" else "model", parts=[types.Part(text=m.content)])
-            for m in req.history
-        ]
-        contents.append(types.Content(role="user", parts=[types.Part(text=req.message)]))
-        config = types.GenerateContentConfig(system_instruction=req.system) if req.system else None
-        response = client.models.generate_content(model=MODEL, contents=contents, config=config)
-        return {"reply": response.text}
-    except Exception as e:
-        logger.error(f"Gemini call failed: {e}")
-        return {"reply": "Sorry, I couldn't process that right now. Try again in a moment.", "error": str(e)}
+    contents = [
+        types.Content(role="user" if m.role == "user" else "model", parts=[types.Part(text=m.content)])
+        for m in req.history
+    ]
+    contents.append(types.Content(role="user", parts=[types.Part(text=req.message)]))
+    config = types.GenerateContentConfig(system_instruction=req.system) if req.system else None
+
+    last_error = None
+    for model_name in FALLBACK_MODELS:
+        try:
+            response = client.models.generate_content(model=model_name, contents=contents, config=config)
+            return {"reply": response.text}
+        except Exception as e:
+            logger.error(f"{model_name} failed: {e}")
+            last_error = e
+            continue
+
+    return {"reply": "Sorry, I couldn't process that right now. Try again in a moment.", "error": str(last_error)}

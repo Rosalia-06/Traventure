@@ -539,6 +539,46 @@ function writeLS(key, val) {
 /* ── Misc helpers ─────────────────────────────────────────────────────── */
 function now() { return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
 
+/* ── Location + AI content fetch helpers ──────────────────────────────── */
+function useUserLocation() {
+  const [loc, setLoc] = useState({ lat: null, lon: null, city: null, status: "loading" });
+  useEffect(() => {
+    if (!navigator.geolocation) { setLoc(l => ({ ...l, status: "unsupported" })); return; }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const geoRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+          const geoData = await geoRes.json();
+          setLoc({ lat: latitude, lon: longitude, city: geoData.city || geoData.locality || "your area", status: "ready" });
+        } catch {
+          setLoc({ lat: latitude, lon: longitude, city: "your area", status: "ready" });
+        }
+      },
+      () => setLoc(l => ({ ...l, status: "denied" }))
+    );
+  }, []);
+  return loc;
+}
+
+async function fetchAIList(prompt, cacheKey) {
+  if (cacheKey) {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) { try { return JSON.parse(cached); } catch {} }
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: prompt, history: [], system: BASE_SYSTEM_PROMPT }),
+    });
+    const data = await res.json();
+    const { places } = parseAI(data.reply || "");
+    if (cacheKey && places.length) sessionStorage.setItem(cacheKey, JSON.stringify(places));
+    return places;
+  } catch { return []; }
+}
+
 function parseAI(raw) {
   let text = raw, places = [], weather = null;
   const pm = raw.match(/\[PLACES_JSON\]([\s\S]*?)\[\/PLACES_JSON\]/);
@@ -670,19 +710,45 @@ function OnboardingPrefs({ onDone }) {
 }
 
 /* ── Weather card (home) ──────────────────────────────────────────────── */
-function WeatherCard({ onChat }) {
-  const weathers = [
-    { emoji: "☀️", temp: "34°C", cond: "Sunny & Clear", advice: "Great for outdoor exploration!" },
-    { emoji: "⛅", temp: "28°C", cond: "Partly Cloudy", advice: "Perfect for sightseeing" },
-    { emoji: "🌧️", temp: "22°C", cond: "Light Rain", advice: "Try indoor cafés & museums" },
-  ];
-  const [wi] = useState(() => weathers[Math.floor(Math.random() * weathers.length)]);
+function WeatherCard({ onChat, lat, lon, city, locStatus }) {
+  const [wi, setWi] = useState(null);
+  useEffect(() => {
+    if (locStatus !== "ready") return;
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`)
+      .then(r => r.json())
+      .then(data => {
+        const temp = Math.round(data.current_weather.temperature);
+        const { emoji, cond, advice } = mapWeatherCode(data.current_weather.weathercode);
+        setWi({ emoji, temp: `${temp}°C`, cond, advice });
+      })
+      .catch(() => {});
+  }, [locStatus, lat, lon]);
+
+  function mapWeatherCode(code) {
+    if (code === 0) return { emoji: "☀️", cond: "Clear Sky", advice: "Great for outdoor exploration!" };
+    if ([1, 2, 3].includes(code)) return { emoji: "⛅", cond: "Partly Cloudy", advice: "Perfect for sightseeing" };
+    if ([45, 48].includes(code)) return { emoji: "🌫️", cond: "Foggy", advice: "Drive carefully" };
+    if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return { emoji: "🌧️", cond: "Rainy", advice: "Try indoor cafés & museums" };
+    if ([95, 96, 99].includes(code)) return { emoji: "⛈️", cond: "Thunderstorm", advice: "Stay indoors" };
+    return { emoji: "🌤️", cond: "Mild", advice: "Good day to explore" };
+  }
+
+  const displayCity = locStatus === "denied" ? "Location permission denied" : locStatus === "unsupported" ? "Location unavailable" : (city || "Locating...");
+
+  if (!wi) {
+    return (
+      <div className="weather-card">
+        <div className="weather-icon">⏳</div>
+        <div><div className="weather-temp">--°C</div><div className="weather-meta">{displayCity}</div></div>
+      </div>
+    );
+  }
   return (
     <div className="weather-card" onClick={() => onChat("What should I do in this weather?")}>
       <div className="weather-icon">{wi.emoji}</div>
       <div>
         <div className="weather-temp">{wi.temp}</div>
-        <div className="weather-meta">{wi.cond} · Ghaziabad</div>
+        <div className="weather-meta">{wi.cond} · {displayCity}</div>
       </div>
       <div className="weather-advice">{wi.advice}</div>
     </div>
@@ -694,6 +760,21 @@ function HomePage({ user, onChat, onNavigate }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = (user?.name || "Explorer").split(" ")[0];
+  const { lat, lon, city, status } = useUserLocation();
+
+  const [places, setPlaces] = useState([]);
+  const [restaurants, setRestaurants] = useState([]);
+  const [loadingLists, setLoadingLists] = useState(true);
+  const COLORS = ["var(--indigo-dim)", "var(--sage-dim)", "var(--gold-dim)", "var(--coral-dim)"];
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    setLoadingLists(true);
+    Promise.all([
+      fetchAIList(`List 5 real, well-known places to visit near ${city}. Reply with ONLY the [PLACES_JSON] block, no extra text.`, `places_${city}`),
+      fetchAIList(`List 4 real, well-known restaurants or food spots near ${city}. Reply with ONLY the [PLACES_JSON] block, no extra text.`, `restaurants_${city}`),
+    ]).then(([p, r]) => { setPlaces(p); setRestaurants(r); setLoadingLists(false); });
+  }, [status, city]);
 
   return (
     <div className="page">
@@ -702,7 +783,7 @@ function HomePage({ user, onChat, onNavigate }) {
         <div className="home-title">Where to <em>today</em>?</div>
       </div>
 
-      <WeatherCard onChat={onChat} />
+      <WeatherCard onChat={onChat} lat={lat} lon={lon} city={city} locStatus={status} />
 
       <div className="section-wrap" style={{ animationDelay: "0.05s" }}>
         <div className="sec-hd"><div className="sec-title">Quick actions</div></div>
@@ -727,12 +808,14 @@ function HomePage({ user, onChat, onNavigate }) {
           <button className="sec-link" onClick={() => onNavigate("explore")}>See all</button>
         </div>
         <div className="place-scroll">
-          {NEARBY_PLACES.map(p => (
+          {loadingLists && <div style={{ padding: 16, color: "var(--ink2)", fontSize: 13 }}>Finding places near {city || "you"}...</div>}
+          {!loadingLists && places.length === 0 && <div style={{ padding: 16, color: "var(--ink2)", fontSize: 13 }}>Couldn't load places right now.</div>}
+          {places.map((p, i) => (
             <div key={p.name} className="place-mini" onClick={() => onChat(`Tell me about ${p.name}`)}>
-              <div className="place-mini-img" style={{ background: p.color }}>{p.emoji}</div>
+              <div className="place-mini-img" style={{ background: COLORS[i % COLORS.length] }}>{p.emoji}</div>
               <div className="place-mini-body">
                 <div className="place-mini-name">{p.name}</div>
-                <div className="place-mini-sub">{p.rating} · {p.desc}</div>
+                <div className="place-mini-sub">{p.rating} · {p.distance}</div>
               </div>
             </div>
           ))}
@@ -745,16 +828,14 @@ function HomePage({ user, onChat, onNavigate }) {
           <button className="sec-link" onClick={() => onNavigate("explore")}>See all</button>
         </div>
         <div className="restaurant-card-row">
-          {RESTAURANTS.map(r => (
+          {loadingLists && <div style={{ padding: 16, color: "var(--ink2)", fontSize: 13 }}>Finding food spots...</div>}
+          {restaurants.map((r, i) => (
             <div key={r.name} className="rest-card" onClick={() => onChat(`Tell me about ${r.name}`)}>
-              <div className="rest-img" style={{ background: r.bg }}>{r.emoji}</div>
+              <div className="rest-img" style={{ background: COLORS[i % COLORS.length] }}>{r.emoji}</div>
               <div className="rest-body">
                 <div className="rest-name">{r.name}</div>
-                <div className="rest-meta">
-                  <span>{r.rating}</span><span>·</span><span>{r.dist}</span><span>·</span>
-                  <span className="badge badge-gold">{r.price}</span>
-                </div>
-                <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 4 }}>{r.cuisine}</div>
+                <div className="rest-meta"><span>{r.rating}</span><span>·</span><span>{r.distance}</span></div>
+                <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 4 }}>{r.type}</div>
               </div>
             </div>
           ))}
@@ -763,10 +844,7 @@ function HomePage({ user, onChat, onNavigate }) {
 
       <div className="ai-cta" onClick={() => onNavigate("chat")}>
         <div className="icon">🤖</div>
-        <div>
-          <div className="t">Ask your AI guide</div>
-          <div className="d">Get personalised suggestions, route tips & more</div>
-        </div>
+        <div><div className="t">Ask your AI guide</div><div className="d">Get personalised suggestions, route tips & more</div></div>
         <div className="go">›</div>
       </div>
     </div>
@@ -778,9 +856,20 @@ function ExplorePage({ onChat }) {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const filters = ["All", "Food", "Heritage", "Café", "Nature", "Market", "Temple"];
+  const { city, status } = useUserLocation();
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const BADGES = ["badge-gold", "badge-indigo", "badge-sage", "badge-coral"];
 
-  const filtered = EXPLORE_DATA.filter(item => {
-    const matchFilter = activeFilter === "All" || item.cat === activeFilter;
+  useEffect(() => {
+    if (status !== "ready") return;
+    setLoading(true);
+    fetchAIList(`List 8 diverse real places to explore near ${city} — mix of heritage, food, cafés, nature, markets, temples. Reply with ONLY the [PLACES_JSON] block, no extra text.`, `explore_${city}`)
+      .then(list => { setData(list); setLoading(false); });
+  }, [status, city]);
+
+  const filtered = data.filter(item => {
+    const matchFilter = activeFilter === "All" || (item.type || "").toLowerCase().includes(activeFilter.toLowerCase());
     const matchSearch = item.name.toLowerCase().includes(search.toLowerCase());
     return matchFilter && matchSearch;
   });
@@ -802,21 +891,22 @@ function ExplorePage({ onChat }) {
         ))}
       </div>
       <div className="explore-grid">
-        {filtered.map((item, i) => (
+        {loading && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 32, color: "var(--ink2)" }}>Finding places near {city || "you"}...</div>}
+        {!loading && filtered.map((item, i) => (
           <div key={item.name} className="ex-card fade-up" style={{ animationDelay: `${i * 0.04}s` }}
             onClick={() => onChat(`Tell me more about ${item.name} and how to get there`)}>
             <div className="ex-card-img">{item.emoji}</div>
             <div className="ex-card-body">
               <div className="ex-card-name">{item.name}</div>
-              <div className="ex-card-meta">{item.cat} · {item.dist}</div>
+              <div className="ex-card-meta">{item.type} · {item.distance}</div>
               <div className="ex-card-footer">
-                <span className={`badge ${item.badgeCls}`}>{item.badge}</span>
+                <span className={`badge ${BADGES[i % BADGES.length]}`}>{item.status || "Info"}</span>
                 <span style={{ fontSize: 11, color: "var(--ink2)" }}>{item.rating}</span>
               </div>
             </div>
           </div>
         ))}
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "32px", color: "var(--ink2)" }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
             <div>No results for "{search}"</div>

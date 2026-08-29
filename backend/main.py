@@ -37,7 +37,7 @@ class ChatRequest(BaseModel):
 def health():
     return {"status": "ok"}
 
-FALLBACK_MODELS = ["gemini-3.5-flash-lite", "gemini-2.0-flash"]
+FALLBACK_MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
 
 @app.post("/chat")
 def chat(req: ChatRequest):
@@ -46,12 +46,17 @@ def chat(req: ChatRequest):
         for m in req.history
     ]
     contents.append(types.Content(role="user", parts=[types.Part(text=req.message)]))
-    config = types.GenerateContentConfig(system_instruction=req.system) if req.system else None
+    config = types.GenerateContentConfig(
+        system_instruction=req.system,
+        max_output_tokens=4096,
+    )
 
     last_error = None
     for model_name in FALLBACK_MODELS:
         try:
             response = client.models.generate_content(model=model_name, contents=contents, config=config)
+            if not response.text:
+                raise ValueError(f"Empty response, finish_reason={response.candidates[0].finish_reason}")
             return {"reply": response.text}
         except Exception as e:
             logger.error(f"{model_name} failed: {e}")

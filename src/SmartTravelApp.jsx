@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-const API_BASE_URL = "https://traventure-backend-jx6j.onrender.com";
+const API_BASE_URL = import.meta.env.DEV
+  ? "http://127.0.0.1:8000"
+  : "https://traventure-backend-jx6j.onrender.com";
 
 /* ════════════════════════════════════════════════════════════════════════
    TRAVENTURE — design tokens
@@ -906,7 +908,13 @@ function ExplorePage({ onChat }) {
             </div>
           </div>
         ))}
-        {!loading && filtered.length === 0 && (
+        {!loading && data.length === 0 && (
+          <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "32px", color: "var(--ink2)" }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>😕</div>
+            <div>Couldn't load places right now — try refreshing.</div>
+          </div>
+        )}
+        {!loading && data.length > 0 && filtered.length === 0 && (
           <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "32px", color: "var(--ink2)" }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
             <div>No results for "{search}"</div>

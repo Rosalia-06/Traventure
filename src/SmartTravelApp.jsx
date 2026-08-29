@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://traventure-backend-jx6j.onrender.com/";
 
 /* ════════════════════════════════════════════════════════════════════════
    TRAVENTURE — design tokens
@@ -911,7 +911,13 @@ function ChatPage({ prefs, initialMessage }) {
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 90) + "px";
   }, [input]);
-  useEffect(() => { if (initialMessage) sendMessage(initialMessage); }, []); // eslint-disable-line
+    const sentInitialRef = useRef(false);
+  useEffect(() => {
+    if (initialMessage && !sentInitialRef.current) {
+      sentInitialRef.current = true;
+      sendMessage(initialMessage);
+    }
+  }, []); // eslint-disable-line
 
   const buildSystemPrompt = () => {
     let base = BASE_SYSTEM_PROMPT;

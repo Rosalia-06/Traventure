@@ -1,5 +1,3 @@
-# Traventure
-Traventure is a smart travel web app that helps users explore places, find food, get route suggestions, and receive AI-powered travel guidance with a focus on eco-friendly travel.
 # 🌍 Traventure – Smart Travel App
 
 Traventure is a web-based travel application that helps users explore nearby places, discover food spots, plan routes, and get intelligent travel suggestions in a single platform. It is designed to simplify trip planning while promoting efficient and eco-friendly travel choices.
@@ -16,19 +14,13 @@ Discover restaurants, cafés, and street food options around you.
 
 **Smart Navigation**
 Choose from multiple route options based on your preference:
-
 * Fastest route
 * Eco-friendly route
 * Less crowded route
 * Well-developed roads
 
 **AI Travel Assistant**
-Get assistance for:
-
-* Travel planning
-* Food suggestions
-* Route guidance
-* Weather-based recommendations
+A Gemini-powered chatbot for travel planning, food suggestions, route guidance, and weather-based recommendations — with conversation history and user-preference-aware responses.
 
 **Weather Insights**
 Plan activities based on current weather conditions.
@@ -40,71 +32,78 @@ Encourages sustainable travel through optimized route suggestions and low-impact
 
 ## 🛠️ Tech Stack
 
-* React (Vite)
-* CSS (Custom UI)
-* AI Integration (Anthropic API – optional)
-* Deployment: Render
+**Frontend:** React (Vite), custom CSS
+**Backend:** Python, FastAPI
+**AI:** Google Gemini API (`gemini-3.6-flash`) via `google-genai` SDK
+**Deployment:** Render (frontend and backend as separate services)
 
 ---
 
 ## 📂 Project Structure
 
-```
 traventure/
 │── public/
 │── src/
-│── dist/
+│ └── SmartTravelApp.jsx # Main app incl. AI chat UI
+│── backend/
+│ ├── main.py # FastAPI app + /chat endpoint
+│ ├── requirements.txt
+│ └── .env.example
 │── package.json
 │── vite.config.js
-```
+
 
 ---
 
-## 🧑‍💻 Getting Started
-
-### 1. Clone the repository
+## 🧑‍💻 Getting Started (Frontend)
 
 ```bash
-git clone https://github.com/rosalia-06/Traventure.git
+git clone https://github.com/Rosalia-06/Traventure.git
 cd Traventure
-```
-
-### 2. Install dependencies
-
-```bash
 npm install
-```
-
-### 3. Run locally
-
-```bash
 npm run dev
 ```
+Runs at `http://localhost:5173`
 
-The application will run at:
+---
 
+## ⚙️ Getting Started (Backend)
+
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate      # Windows
+pip install -r requirements.txt
 ```
-http://localhost:5173/
+
+Create a `.env` file in `backend/` (copy `.env.example` and add your real key):
+
+GEMINI_API_KEY=your_actual_key_here
+
+
+Run it:
+```bash
+uvicorn main:app --reload --port 8000
 ```
+Runs at `http://127.0.0.1:8000` — visit `/docs` for the interactive API explorer.
 
 ---
 
 ## 🌍 Live Demo
 
-(Add your Render deployment link here)
+Frontend: https://traventure-4m5a.onrender.com
+Backend: https://traventure-backend-jx6j.onrender.com
 
 ---
 
 ## ⚠️ Note
 
-The AI chatbot feature requires an API key to function.
-Without it, the application will run normally but AI responses will be unavailable.
+The AI chatbot requires a valid `GEMINI_API_KEY` set as an environment variable on the backend (locally in `.env`, or in Render's dashboard for deployment). Without it, chatbot responses will fail.
 
 ---
 
 ## 📌 Future Improvements
 
-* Backend integration for secure API handling
 * Real-time maps integration
 * Live location tracking
 * Improved mobile responsiveness
@@ -126,5 +125,4 @@ This project is open-source and available under the MIT License.
 
 ## 👩‍💻 Author
 
-Developed by **rosalia-06**
->>>>>>> 709018b3279c978fb0c46b1ea7064fbc480ac604
+Developed by **Rosalia-06**

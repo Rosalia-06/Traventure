@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import List, Literal, Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -8,6 +9,8 @@ from google import genai
 from google.genai import types
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("traventure")
 
 app = FastAPI()
 
@@ -46,4 +49,5 @@ def chat(req: ChatRequest):
         response = client.models.generate_content(model=MODEL, contents=contents, config=config)
         return {"reply": response.text}
     except Exception as e:
+        logger.error(f"Gemini call failed: {e}")
         return {"reply": "Sorry, I couldn't process that right now. Try again in a moment.", "error": str(e)}

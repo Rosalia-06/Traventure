@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-const API_BASE_URL = "https://traventure-backend-jx6j.onrender.com/";
+const API_BASE_URL = "https://traventure-backend-jx6j.onrender.com";
 
 /* ════════════════════════════════════════════════════════════════════════
    TRAVENTURE — design tokens

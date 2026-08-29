@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-3.6-flash"
+MODEL = "gemini-2.5-flash-lite"
 
 class Message(BaseModel):
     role: Literal["user", "assistant"]

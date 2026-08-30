@@ -2,17 +2,24 @@ import os
 import logging
 from typing import List, Literal, Optional
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("traventure")
 
 app = FastAPI()
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,7 +47,8 @@ def health():
 FALLBACK_MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
 
 @app.post("/chat")
-def chat(req: ChatRequest):
+@limiter.limit("10/minute")
+def chat(request: Request, req: ChatRequest):
     contents = [
         types.Content(role="user" if m.role == "user" else "model", parts=[types.Part(text=m.content)])
         for m in req.history

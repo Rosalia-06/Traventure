@@ -96,6 +96,14 @@ Runs at `http://127.0.0.1:8000` — visit `/docs` for the interactive API explor
 
 ---
 
+## 🔒 Security
+
+- **Rate limiting** on the `/chat` endpoint (10 requests/minute per IP) via `slowapi`, to prevent abuse and protect the free-tier Gemini quota from being exhausted by direct API calls that bypass the frontend.
+- **CORS restricted** to the app's actual frontend origins only — the backend does not accept cross-origin browser requests from arbitrary sites.
+- **API key never exposed to the client** — `GEMINI_API_KEY` is loaded server-side only via environment variables and is never sent in any frontend response or bundled JS.
+
+---
+
 ## 🔮 Future Improvements
 
 - Real-time Places API integration (Google Places / Foursquare) for live ratings and open/closed status
